@@ -87,7 +87,7 @@ void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, 
         {
             auto fileName = std::to_string(fileNameInNum++);
             auto nextProcess = files.size() - numProcessed;
-            nextProcess = nextProcess > fdLimit ? fdLimit : nextProcess;
+            nextProcess = nextProcess > numFdLimit ? numFdLimit : nextProcess;
             mergeSomeFiles(fileName.c_str(), files, numProcessed, nextProcess);
             numProcessed += nextProcess;
             tempList.push_back(std::move(fileName));
@@ -140,6 +140,7 @@ void readAndSort(std::vector<std::string> &tempFiles, std::FILE *in, std::size_t
             }
             else
             {
+                std::fclose(outTemp);
                 std::remove(fileName.c_str());
                 return;
             }
