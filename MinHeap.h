@@ -20,21 +20,21 @@ public:
     void MinHeapify(std::size_t);
 
     // Get index of left child of node at index i
-    size_t left(std::size_t i);
+    static std::size_t left(std::size_t i);
 
     // Get index of right child of node at index i
-    std::size_t right(std::size_t i);
+    static std::size_t right(std::size_t i);
 
     // Get the root
-    MinHeapNode getMin();
+    const MinHeapNode getMin();
 
     // Replace root with new node x and heapify() new root
-    void replaceMin(MinHeapNode x);
+    void replaceMin(const MinHeapNode &x);
 
     //Delete root and heapify() new root
     void deleteMin();
 
-    bool empty();
+    const bool empty();
 
     ~MinHeap();
 };
