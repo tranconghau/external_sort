@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-I. -std=c++11 -lpthread -O2
+CFLAGS=-I. -std=c++11 -lpthread -O2 -DVERBOSE
 BIN = ex_sort
 
 OBJ = MinHeap.o Utilities.o ex_sort.o

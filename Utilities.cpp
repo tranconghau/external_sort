@@ -7,7 +7,7 @@
 
 void debugLog(const std::string &param1, const std::string &param2)
 {
-#ifdef DEBUG
+#ifdef VERBOSE
     std::cout << param1 << ": " << param2 << std::endl;
 #endif
 }
@@ -43,7 +43,7 @@ std::size_t getFileSile(const std::string &file)
     auto ifs = std::ifstream(file, std::ios::ate);
     if (!ifs.is_open())
     {
-        std::cerr << "Cannot open " << file << std::endl;
+        std::cerr << "Can't open " << file << " to get size." << std::endl;
         std::exit(EXIT_FAILURE);
     }
     auto tmp = ifs.tellg();

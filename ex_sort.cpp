@@ -1,4 +1,3 @@
-#include <cstdio>
 //for getrlimit
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -14,10 +13,6 @@
 #include "MinHeap.h"
 #include "Utilities.h"
 
-#ifndef LINE_MAX
-#define LINE_MAX 2048
-#endif
-
 std::atomic<std::size_t> fileNameInNum(1);
 std::mutex readMutex;
 auto moreInput = true;
@@ -26,25 +21,26 @@ std::mutex tempFileMux;
 void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list,
                     unsigned long processed, unsigned long numFiles)
 {
-    auto inFiles = std::vector<std::FILE*>();
+    auto inFiles = std::vector<std::ifstream>();
     for(auto i = 0; i < numFiles; i++)
-        inFiles.push_back(openFile(list[processed + i], "r"));
+        inFiles.push_back(std::ifstream(list[processed + i]));
+
     std::remove(out.c_str());
-    //create output file
-    auto outFd = openFile(out, "w");
+    auto outStream = std::ofstream(out);
 
     // Create a min heap
     MinHeapNode *harr = new MinHeapNode[numFiles];
-    char line[LINE_MAX];
+    auto line = std::string();
     auto i = 0;
     for(; i < numFiles; i++)
     {
-        // break if eof
-        if(std::fgets(line, LINE_MAX, inFiles[i]) == nullptr)
-            break;
-        harr[i].element = line;
+        if(!std::getline(inFiles[i], line))
+            continue;
+
+        harr[i].element = std::move(line);
         harr[i].idx = i;
     }
+
     // Create the heap
     MinHeap hp(harr, i);
     // Now one by one get the minimum element from min heap and replace it with next element
@@ -52,35 +48,39 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
     {
         // Get the minimum element and store it in output file
         MinHeapNode root = hp.getMin();
-        std::fputs(root.element.c_str(), outFd);
+        outStream.write(root.element.c_str(), root.element.length());
+        outStream.write("\n", 1);
 
         // Find the next element that will replace current root of heap.
         // The next element belongs to same input file as the current min element.
-        if(std::fgets(line, LINE_MAX, inFiles[root.idx]) == nullptr)
+        std::getline(inFiles[root.idx], line);
+        if (inFiles[root.idx].eof() && line.empty())
         {
             //root.element = maxString; ==> waste time
             hp.deleteMin();
         }
-        else
-            root.element = line;
-        // Replace root with next element of input file
-        hp.replaceMin(root);
+
+        if(!line.empty())
+        {
+            root.element = std::move(line);
+            hp.replaceMin(root);
+        }
     }
 
     for(auto i = 0; i < numFiles; i++)
     {
-        std::fclose(inFiles[i]);
+        inFiles[i].close();
         std::remove(list[processed + i].c_str());
     }
 
-    std::fclose(outFd);
+    outStream.close();
 }
 
 void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, unsigned long fdLimit)
 {
     auto numFdLimit = fdLimit - 4;//4 means 0,1,2 and fd for output
     auto numProcessed = 0;
-    if(files.size() > fdLimit)
+    if(files.size() > numFdLimit)
     {
         auto tempList = std::vector<std::string>(0);
         while(files.size() > numProcessed)
@@ -93,27 +93,19 @@ void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, 
             tempList.push_back(std::move(fileName));
         }
 
-        if(tempList.size() > 0) //Assume the size less than fdLimit :D
+        if(tempList.size() > 0) //Assume the size less than numFdLimit :D
             mergeSomeFiles(outputFile, tempList, 0, tempList.size());
     }
     else
         mergeSomeFiles(outputFile, files, 0, files.size());
 }
 
-void readAndSort(std::vector<std::string> &tempFiles, std::FILE *in, std::size_t runSize)
+void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::size_t runSize)
 {
-    if(in ==  nullptr)
-        return;
     while(true)
     {
-        //create temp file
-        auto fileName = std::to_string(fileNameInNum++);
-        std::remove(fileName.c_str());
-        auto outTemp = openFile(fileName, "w");
-
         auto numRead = 0;
-        char line[LINE_MAX] = {0};
-        auto temp = std::string();
+        auto line = std::string();
         auto lineVec = std::vector<std::string>();
         {
             std::lock_guard<std::mutex> lock(readMutex);
@@ -121,44 +113,45 @@ void readAndSort(std::vector<std::string> &tempFiles, std::FILE *in, std::size_t
             {
                 while(numRead < runSize)
                 {
-                    if(std::fgets(line, LINE_MAX, in) == nullptr)
+                    if(!std::getline(in, line))
                     {
                         moreInput = false;
                         break;
                     }
-
-                    if(line[0] == '\n')  //ignore empty line
+                    if(line.empty() && !in.eof())
                         numRead += 1;
                     else
                     {
-                        temp = line;
-                        numRead += temp.length() + 1; // 1 for '\n'
-                        lineVec.push_back(std::move(temp));
+                        numRead += line.length() + 1; // 1 for '\n'
+                        lineVec.push_back(std::move(line));
                     }
-                    temp = "";
+                    if(in.eof())
+                        break;
                 }
             }
             else
             {
-                std::fclose(outTemp);
-                std::remove(fileName.c_str());
                 return;
             }
         }
 
-        std::sort(lineVec.begin(), lineVec.end());
-        //write to temp file
-        for(auto &i : lineVec)
+        if(lineVec.size() > 0)
         {
-            std::fputs(i.c_str(), outTemp);
-            if(i[i.length() - 1] != '\n')
-                std::fputc('\n', outTemp);
-        }
-        std::fclose(outTemp);
-
-        {
-            std::lock_guard<std::mutex> lock(tempFileMux);
-            tempFiles.push_back(std::move(fileName));
+            std::sort(lineVec.begin(), lineVec.end());
+            //create & write to temp file
+            auto fileName = std::to_string(fileNameInNum++);
+            std::remove(fileName.c_str());
+            auto outTemp = std::ofstream(fileName);
+            for(auto &i : lineVec)
+            {
+                outTemp.write(i.c_str(), i.length());
+                outTemp.write("\n", 1);
+            }
+            outTemp.close();
+            {
+                std::lock_guard<std::mutex> lock(tempFileMux);
+                tempFiles.push_back(std::move(fileName));
+            }
         }
     }
 }
@@ -166,20 +159,20 @@ void readAndSort(std::vector<std::string> &tempFiles, std::FILE *in, std::size_t
 std::vector<std::string>
 createInitialRuns(const std::string &inputFile, std::size_t limitBytes, unsigned int numThreads)
 {
-    auto in = openFile(inputFile, "r");
+    auto in = std::ifstream(inputFile);
     auto tempFiles = std::vector<std::string>();
     auto runSize = limitBytes / numThreads;
     auto threadList = std::vector<std::thread>();
     for(auto i = 0; i < numThreads; i++)
     {
-        threadList.push_back(std::thread(readAndSort, std::ref(tempFiles), in, runSize));
+        threadList.push_back(std::thread(readAndSort, std::ref(tempFiles), std::ref(in), runSize));
     }
 
     std::for_each(threadList.begin(), threadList.end(), [](std::thread &th)
     {
         th.join();
     });
-    std::fclose(in);
+    in.close();
     return tempFiles;
 }
 
@@ -194,25 +187,20 @@ void externalSort(const std::string &inputFile, const std::string &outputFile, s
     }
 
     debugLog("Using thread", std::to_string(numThreads));
-    //get file descriptor limit
     struct rlimit resourceLimit;
     if(getrlimit(RLIMIT_NOFILE, &resourceLimit) != 0)
     {
         std::cerr << "Cannot get fd limit" << std::endl;
         return;
     }
-    debugLog("System limit fd", std::to_string(resourceLimit.rlim_cur));
+    debugLog("Limit fd", std::to_string(resourceLimit.rlim_cur));
 
     // read the input file, create the initial runs, and assign the runs to the scratch output files
     auto tempFiles = createInitialRuns(inputFile, limitBytes, numThreads);
-    debugLog("Using temp file", std::to_string(tempFiles.size()));
+    debugLog("Temp file", std::to_string(tempFiles.size()));
 
     // Merge the runs using the K-way merging
     mergeFiles(outputFile, tempFiles, resourceLimit.rlim_cur);
-
-    //deletes temp files
-    for(auto &i : tempFiles)
-        std::remove(i.c_str());
 }
 
 int main(int argc, const char *argv[])
@@ -236,19 +224,13 @@ int main(int argc, const char *argv[])
 
     if(fileSize == 0)
     {
-        std::cerr << "Input is empty" << std::endl;
+        std::cerr << inputFile << " is empty" << std::endl;
         return EXIT_FAILURE;
     }
 
-#ifndef DEBUG
     std::cout << "Processing..." << std::endl;
-#endif
-
     externalSort(inputFile, outputFile, limitInBytes);
-
-#ifndef DEBUG
     std::cout << "Done" << std::endl;
-#endif
 
     return EXIT_SUCCESS;
 }
