@@ -13,6 +13,7 @@
 #include "MinHeap.h"
 #include "Utilities.h"
 
+const std::string tempDir = "/tmp/";
 std::atomic<std::size_t> fileNameInNum(1);
 std::mutex readMutex;
 auto moreInput = true;
@@ -79,13 +80,13 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
 void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, unsigned long fdLimit)
 {
     auto numFdLimit = fdLimit - 4;//4 means 0,1,2 and fd for output
-    auto numProcessed = 0;
+    auto numProcessed = 0UL;
     if(files.size() > numFdLimit)
     {
         auto tempList = std::vector<std::string>(0);
         while(files.size() > numProcessed)
         {
-            auto fileName = std::to_string(fileNameInNum++);
+            auto fileName = tempDir + std::to_string(fileNameInNum++);
             auto nextProcess = files.size() - numProcessed;
             nextProcess = nextProcess > numFdLimit ? numFdLimit : nextProcess;
             mergeSomeFiles(fileName.c_str(), files, numProcessed, nextProcess);
@@ -104,7 +105,7 @@ void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::si
 {
     while(true)
     {
-        auto numRead = 0;
+        auto numRead = 0UL;
         auto line = std::string();
         auto lineVec = std::vector<std::string>();
         {
@@ -139,7 +140,7 @@ void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::si
         {
             std::sort(lineVec.begin(), lineVec.end());
             //create & write to temp file
-            auto fileName = std::to_string(fileNameInNum++);
+            auto fileName = tempDir + std::to_string(fileNameInNum++);
             std::remove(fileName.c_str());
             auto outTemp = std::ofstream(fileName);
             for(auto &i : lineVec)
