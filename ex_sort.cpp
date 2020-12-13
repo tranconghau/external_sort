@@ -23,7 +23,7 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
                     unsigned long processed, unsigned long numFiles)
 {
     auto inFiles = std::vector<std::ifstream>();
-    for(auto i = 0; i < numFiles; i++)
+    for(auto i = 0UL; i < numFiles; i++)
         inFiles.push_back(std::ifstream(list[processed + i]));
 
     std::remove(out.c_str());
@@ -32,7 +32,7 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
     // Create a min heap
     MinHeapNode *harr = new MinHeapNode[numFiles];
     auto line = std::string();
-    auto i = 0;
+    auto i = 0UL;
     for(; i < numFiles; i++)
     {
         if(!std::getline(inFiles[i], line))
@@ -68,7 +68,7 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
         }
     }
 
-    for(auto i = 0; i < numFiles; i++)
+    for(auto i = 0UL; i < numFiles; i++)
     {
         inFiles[i].close();
         std::remove(list[processed + i].c_str());
@@ -80,10 +80,10 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
 void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, unsigned long fdLimit)
 {
     auto numFdLimit = fdLimit - 4;//4 means 0,1,2 and fd for output
-    auto numProcessed = 0UL;
     if(files.size() > numFdLimit)
     {
         auto tempList = std::vector<std::string>(0);
+        auto numProcessed = 0UL;
         while(files.size() > numProcessed)
         {
             auto fileName = tempDir + std::to_string(fileNameInNum++);
@@ -105,13 +105,13 @@ void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::si
 {
     while(true)
     {
-        auto numRead = 0UL;
         auto line = std::string();
         auto lineVec = std::vector<std::string>();
         {
             std::lock_guard<std::mutex> lock(readMutex);
             if (moreInput)
             {
+                auto numRead = 0UL;
                 while(numRead < runSize)
                 {
                     if(!std::getline(in, line))
@@ -164,7 +164,7 @@ createInitialRuns(const std::string &inputFile, std::size_t limitBytes, unsigned
     auto tempFiles = std::vector<std::string>();
     auto runSize = limitBytes / numThreads;
     auto threadList = std::vector<std::thread>();
-    for(auto i = 0; i < numThreads; i++)
+    for(auto i = 0U; i < numThreads; i++)
     {
         threadList.push_back(std::thread(readAndSort, std::ref(tempFiles), std::ref(in), runSize));
     }

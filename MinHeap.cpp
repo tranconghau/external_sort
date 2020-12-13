@@ -22,7 +22,7 @@ MinHeap::~MinHeap()
     }
 }
 
-size_t MinHeap::left(std::size_t i)
+std::size_t MinHeap::left(std::size_t i)
 {
     return (2 * i + 1);
 }
@@ -32,12 +32,12 @@ std::size_t MinHeap::right(std::size_t i)
     return (2 * i + 2);
 }
 
-MinHeapNode MinHeap::getMin()
+const MinHeapNode MinHeap::getMin()
 {
     return harr[0];
 }
 
-void MinHeap::replaceMin(MinHeapNode x)
+void MinHeap::replaceMin(const MinHeapNode &x)
 {
     if(heapSize > 0)
     {
@@ -46,7 +46,7 @@ void MinHeap::replaceMin(MinHeapNode x)
     }
 }
 
-bool MinHeap::empty()
+const bool MinHeap::empty()
 {
     return (heapSize == 0);
 }
