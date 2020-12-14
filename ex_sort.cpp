@@ -19,15 +19,30 @@ std::mutex readMutex;
 auto moreInput = true;
 std::mutex tempFileMux;
 
-void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list,
+int mergeSomeFiles(const std::string &out, const std::vector<std::string> &list,
                     unsigned long processed, unsigned long numFiles)
 {
+    auto retCode = 1;
+    //Prepare IO
     auto inFiles = std::vector<std::ifstream>();
-    for(auto i = 0UL; i < numFiles; i++)
-        inFiles.push_back(std::ifstream(list[processed + i]));
-
+    for (auto i = 0UL; i < numFiles; i++)
+    {
+        auto inTemp = std::ifstream(list[processed + i]);
+        if(inTemp.is_open())
+            inFiles.push_back(std::move(inTemp));
+        else
+        {
+            std::cerr << "Can't open temp file for merging" << std::endl;
+            return retCode;
+        }
+    }
     std::remove(out.c_str());
     auto outStream = std::ofstream(out);
+    if (!outStream.is_open())
+    {
+        std::cerr << "Can't open out temp for merging" << std::endl;
+        return retCode;
+    }
 
     // Create a min heap
     MinHeapNode *harr = new MinHeapNode[numFiles];
@@ -41,9 +56,8 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
         harr[i].element = std::move(line);
         harr[i].idx = i;
     }
-
-    // Create the heap
     MinHeap hp(harr, i);
+
     // Now one by one get the minimum element from min heap and replace it with next element
     while(!hp.empty())
     {
@@ -73,12 +87,13 @@ void mergeSomeFiles(const std::string &out, const std::vector<std::string> &list
         inFiles[i].close();
         std::remove(list[processed + i].c_str());
     }
-
     outStream.close();
+    return 0;
 }
 
-void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, unsigned long fdLimit)
+int mergeFiles(const std::string &outputFile, std::vector<std::string> &files, unsigned long fdLimit)
 {
+    auto retCode = 1;
     auto numFdLimit = fdLimit - 4;//4 means 0,1,2 and fd for output
     if(files.size() > numFdLimit)
     {
@@ -89,22 +104,25 @@ void mergeFiles(const std::string &outputFile, std::vector<std::string> &files, 
             auto fileName = tempDir + std::to_string(fileNameInNum++);
             auto nextProcess = files.size() - numProcessed;
             nextProcess = nextProcess > numFdLimit ? numFdLimit : nextProcess;
-            mergeSomeFiles(fileName.c_str(), files, numProcessed, nextProcess);
+            if (mergeSomeFiles(fileName.c_str(), files, numProcessed, nextProcess) != 0)
+                return retCode;
             numProcessed += nextProcess;
             tempList.push_back(std::move(fileName));
         }
 
-        if(tempList.size() > 0) //Assume the size less than numFdLimit :D
-            mergeSomeFiles(outputFile, tempList, 0, tempList.size());
+        if(tempList.size() > 0) //Assume the size not greater than numFdLimit :D
+            retCode = mergeSomeFiles(outputFile, tempList, 0, tempList.size());
     }
     else
-        mergeSomeFiles(outputFile, files, 0, files.size());
+        retCode = mergeSomeFiles(outputFile, files, 0, files.size());
+    return retCode;
 }
 
 void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::size_t runSize)
 {
     while(true)
     {
+        //reading phase
         auto line = std::string();
         auto lineVec = std::vector<std::string>();
         {
@@ -136,10 +154,10 @@ void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::si
             }
         }
 
+        //sorting and write to temp file
         if(lineVec.size() > 0)
         {
             std::sort(lineVec.begin(), lineVec.end());
-            //create & write to temp file
             auto fileName = tempDir + std::to_string(fileNameInNum++);
             std::remove(fileName.c_str());
             auto outTemp = std::ofstream(fileName);
@@ -160,8 +178,13 @@ void readAndSort(std::vector<std::string> &tempFiles, std::ifstream &in, std::si
 std::vector<std::string>
 createInitialRuns(const std::string &inputFile, std::size_t limitBytes, unsigned int numThreads)
 {
-    auto in = std::ifstream(inputFile);
     auto tempFiles = std::vector<std::string>();
+    auto in = std::ifstream(inputFile);
+    if (!in.is_open())
+    {
+        std::cerr << "Can't open input file for sorting" << std::endl;
+        return tempFiles;
+    }
     auto runSize = limitBytes / numThreads;
     auto threadList = std::vector<std::thread>();
     for(auto i = 0U; i < numThreads; i++)
@@ -178,13 +201,14 @@ createInitialRuns(const std::string &inputFile, std::size_t limitBytes, unsigned
 }
 
 // For sorting data stored on disk
-void externalSort(const std::string &inputFile, const std::string &outputFile, std::size_t limitBytes)
+int externalSort(const std::string &inputFile, const std::string &outputFile, std::size_t limitBytes)
 {
+    auto retCode = 1;
     auto numThreads = std::thread::hardware_concurrency();
     if(numThreads == 0)
     {
         std::cerr << "Num of threads seem invalid" << std::endl;
-        return;
+        return retCode;
     }
 
     debugLog("Using thread", std::to_string(numThreads));
@@ -192,7 +216,7 @@ void externalSort(const std::string &inputFile, const std::string &outputFile, s
     if(getrlimit(RLIMIT_NOFILE, &resourceLimit) != 0)
     {
         std::cerr << "Cannot get fd limit" << std::endl;
-        return;
+        return retCode;
     }
     debugLog("Limit fd", std::to_string(resourceLimit.rlim_cur));
 
@@ -201,7 +225,9 @@ void externalSort(const std::string &inputFile, const std::string &outputFile, s
     debugLog("Temp file", std::to_string(tempFiles.size()));
 
     // Merge the runs using the K-way merging
-    mergeFiles(outputFile, tempFiles, resourceLimit.rlim_cur);
+    if(tempFiles.size() > 0)
+        retCode = mergeFiles(outputFile, tempFiles, resourceLimit.rlim_cur);
+    return retCode;
 }
 
 int main(int argc, const char *argv[])
@@ -212,7 +238,7 @@ int main(int argc, const char *argv[])
         return EXIT_FAILURE;
     }
 
-    auto limitInBytes = std::stol(argv[3]); //limit in bytes
+    auto limitInBytes = std::stol(argv[3]);
     if(limitInBytes < 0)
     {
         std::cerr << "Invalid limit bytes" << std::endl;
@@ -229,9 +255,13 @@ int main(int argc, const char *argv[])
         return EXIT_FAILURE;
     }
 
-    std::cout << "Processing..." << std::endl;
-    externalSort(inputFile, outputFile, limitInBytes);
-    std::cout << "Done" << std::endl;
+    debugLog("Processing", "");
+    if (externalSort(inputFile, outputFile, limitInBytes) == 1)
+    {
+        std::cerr << "Sort failed" << std::endl;
+        return EXIT_FAILURE;
+    }
+    debugLog("Result", "success");
 
     return EXIT_SUCCESS;
 }
