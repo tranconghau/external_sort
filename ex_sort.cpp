@@ -44,7 +44,7 @@ int mergeSomeFiles(const std::string &out, const std::vector<std::string> &list,
         return retCode;
     }
 
-    // Create a min heap
+    //Create a min heap
     MinHeapNode *harr = new MinHeapNode[numFiles];
     auto line = std::string();
     auto i = 0UL;
@@ -58,16 +58,16 @@ int mergeSomeFiles(const std::string &out, const std::vector<std::string> &list,
     }
     MinHeap hp(harr, i);
 
-    // Now one by one get the minimum element from min heap and replace it with next element
+    //Now one by one get the minimum element from min heap and replace it with next element
     while(!hp.empty())
     {
-        // Get the minimum element and store it in output file
+        //Get the minimum element and store it in output file
         MinHeapNode root = hp.getMin();
         outStream.write(root.element.c_str(), root.element.length());
         outStream.write("\n", 1);
 
-        // Find the next element that will replace current root of heap.
-        // The next element belongs to same input file as the current min element.
+        //Find the next element that will replace current root of heap.
+        //The next element belongs to same input file as the current min element.
         std::getline(inFiles[root.idx], line);
         if (inFiles[root.idx].eof() && line.empty())
         {
@@ -95,23 +95,28 @@ int mergeFiles(const std::string &outputFile, std::vector<std::string> &files, u
 {
     auto retCode = 1;
     auto numFdLimit = fdLimit - 4;//4 means 0,1,2 and fd for output
-    if(files.size() > numFdLimit)
+    auto listSize = files.size();
+    if(listSize > numFdLimit)
     {
-        auto tempList = std::vector<std::string>(0);
-        auto numProcessed = 0UL;
-        while(files.size() > numProcessed)
+        do
         {
-            auto fileName = tempDir + std::to_string(fileNameInNum++);
-            auto nextProcess = files.size() - numProcessed;
-            nextProcess = nextProcess > numFdLimit ? numFdLimit : nextProcess;
-            if (mergeSomeFiles(fileName.c_str(), files, numProcessed, nextProcess) != 0)
-                return retCode;
-            numProcessed += nextProcess;
-            tempList.push_back(std::move(fileName));
-        }
+            auto numProcessed = 0UL;
+            auto tempListIn = std::move(files);
+            auto tmpListSize = tempListIn.size();
+            while(tmpListSize > numProcessed)
+            {
+                auto fileName = tempDir + std::to_string(fileNameInNum++);
+                auto nextProcess = tmpListSize - numProcessed;
+                nextProcess = nextProcess > numFdLimit ? numFdLimit : nextProcess;
+                if (mergeSomeFiles(fileName.c_str(), tempListIn, numProcessed, nextProcess) != 0)
+                    return retCode;
+                numProcessed += nextProcess;
+                files.push_back(std::move(fileName));
+            }
+        }while(files.size() > numFdLimit);
 
-        if(tempList.size() > 0) //Assume the size not greater than numFdLimit :D
-            retCode = mergeSomeFiles(outputFile, tempList, 0, tempList.size());
+        if(files.size() > 0)//final output
+            retCode = mergeSomeFiles(outputFile, files, 0, files.size());
     }
     else
         retCode = mergeSomeFiles(outputFile, files, 0, files.size());
