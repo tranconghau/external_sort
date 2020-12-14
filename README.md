@@ -12,7 +12,7 @@ Available libraries:
 
 - change to repo directory, type make
 ```sh
-$ cd sorting_algos
+$ cd external_sort
 $ make
 ```
 
